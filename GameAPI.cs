@@ -77,6 +77,8 @@ namespace LoRTracker
             return CurrentState == PlayerState.OFFLINE;
         }
 
+        static string LastStateString;
+
         public static async Task UpdateState()
         {
             try
@@ -99,9 +101,10 @@ namespace LoRTracker
                         break;
                 }
 
-                if(IsInGame())
+                if(NextState != LastStateString)
                 {
-                    LastActiveDeck = (await GetActiveDeckList()).DeckCode;
+                    LastStateString = NextState;
+                    Debug.WriteLine(NextState);
                 }
 
                 if(LastGameID == null)
@@ -109,20 +112,28 @@ namespace LoRTracker
                     LastGameID = (await GetGameResult()).GameID;
                 }
 
+                if(IsOffline())
+                {
+                    await CancelGame();
+                }
+
+                if(EnteredGame())
+                {
+                    await PushGameStart();
+                }
+
+                if(IsInGame())
+                {
+                    LastActiveDeck = (await GetActiveDeckList()).DeckCode;
+                    await PushUpdates();
+                }
+
                 if(QuitGame())
                 {
                     LastGameScore = (await GetGameResult()).LocalPlayerWon;
                     LastGameID = (await GetGameResult()).GameID;
+                    await PushGameEnd();
                 }
-
-
-                Debug.WriteLine(NextState);
-                Debug.WriteLine(CurrentState);
-                Debug.WriteLine(LastGameScore);
-                Debug.WriteLine(LastGameID);
-                Debug.WriteLine(LastActiveDeck);
-
-
             }
 #pragma warning disable CS0168 
             catch(HttpRequestException e)
@@ -131,24 +142,40 @@ namespace LoRTracker
             }
         }
 
+        static string LastDebugMessage;
+
         internal static async Task PushGameStart()
         {
+            if(ActiveGameToken != null && ActiveGameToken.Length > 5)
+            {
+                return;
+            }
+
             var data = await GetPositionalRects();
 
             var formContent = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("token", Form1.Token),
                 new KeyValuePair<string, string>("self", data.PlayerName),
-                new KeyValuePair<string, string>("other", data.OpponentName)
+                new KeyValuePair<string, string>("other", data.OpponentName),
+                new KeyValuePair<string, string>("interval", Form1._InGameInterval.ToString()),
             });
 
             var response = await Client.PostAsync(new Uri(Resources.GameStartUrl), formContent);
             ActiveGameToken = await response.Content.ReadAsStringAsync();
             ActiveGameTime = 0;
+
+            LastDebugMessage = "Pushed game start event";
+            Debug.WriteLine("Pushed game start event");
         }
 
         internal static async Task PushUpdates()
         {
+            if(ActiveGameToken == null || ActiveGameToken.Length < 5)
+            {
+                return;
+            }
+
             var CurrentBoardState = await GetPositionalRects();
             if(LastBoardState == null)
             {
@@ -171,10 +198,27 @@ namespace LoRTracker
             });
 
             var response = await Client.PostAsync(new Uri(Resources.GameUpdateUrl), formContent);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if(content.Length > 1)
+            {
+                Debug.WriteLine(content);
+            }
+
+            if(LastDebugMessage != "Pushed update event")
+            {
+                LastDebugMessage = "Pushed update event";
+                Debug.WriteLine("Pushed update event");
+            }
         }
 
         internal static async Task PushGameEnd()
         {
+            if(ActiveGameToken == null || ActiveGameToken.Length < 5)
+            {
+                return;
+            }
+
             var formContent = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("token", Form1.Token),
@@ -186,6 +230,13 @@ namespace LoRTracker
             });
 
             var response = await Client.PostAsync(new Uri(Resources.GameEndUrl), formContent);
+            var content = await response.Content.ReadAsStringAsync();
+
+            Debug.WriteLine("Ending game for token " + ActiveGameToken);
+
+            LastDebugMessage = "Pushed game end event";
+            Debug.WriteLine("Pushed game end event");
+            Debug.WriteLine(content);
 
             ActiveGameToken = null;
             ActiveGameTime = 0;
@@ -193,19 +244,26 @@ namespace LoRTracker
 
         internal static async Task CancelGame()
         {
-            if(ActiveGameToken != null)
+            if(ActiveGameToken == null || ActiveGameToken.Length < 5)
             {
-                var formContent = new FormUrlEncodedContent(new[]
+                return;
+            }
+
+            var formContent = new FormUrlEncodedContent(new[]
                 {
                     new KeyValuePair<string, string>("token", Form1.Token),
                     new KeyValuePair<string, string>("gameToken", ActiveGameToken),
                 });
 
-                var response = await Client.PostAsync(new Uri(Resources.GameEndUrl), formContent);
+            var response = await Client.PostAsync(new Uri(Resources.GameEndUrl), formContent);
+            var content = await response.Content.ReadAsStringAsync();
 
-                ActiveGameToken = null;
-                ActiveGameTime = 0;
-            }
+            LastDebugMessage = "Pushed game cancel event";
+            Debug.WriteLine("Pushed game cancel event");
+            Debug.WriteLine(content);
+
+            ActiveGameToken = null;
+            ActiveGameTime = 0;
         }
 
         public class ExpeditionResponse

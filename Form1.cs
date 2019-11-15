@@ -236,26 +236,21 @@ namespace LoRTracker
 
             if(GameAPI.EnteredGame())
             {
-                await GameAPI.PushGameStart();
-                _GameTimer?.Change(0, _InGameInterval);
+                _GameTimer?.Change(_InGameInterval, _InGameInterval);
             }
 
             if(GameAPI.IsInGame())
             {
-                await GameAPI.PushUpdates();
                 GameAPI.ActiveGameTime += _InGameInterval;
             }
 
             if(GameAPI.QuitGame())
             {
-                await GameAPI.PushGameEnd();
-                _GameTimer?.Change(0, _NotIngameInterval);
+                _GameTimer?.Change(_NotIngameInterval, _NotIngameInterval);
             }
 
             if(GameAPI.IsOffline())
             {
-                await GameAPI.CancelGame();
-
                 GameConnectionLabel.Invoke((MethodInvoker) delegate
                 {
                     GameConnectionLabel.Text = "Unable to connect. Is the game running?";
