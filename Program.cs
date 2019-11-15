@@ -1,6 +1,8 @@
-﻿using System;
+﻿using LoRTracker.Properties;
+using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -18,6 +20,17 @@ namespace LoRTracker
             Process[] RunningProcesses = Process.GetProcessesByName(ProcessName);
             if(RunningProcesses.Length == 1)
             {
+                HttpClient client = new HttpClient();
+                var versionTask = client.GetStringAsync(new Uri(Resources.UpdateVersionUrl));
+                versionTask.Wait();
+                var version = int.Parse(versionTask.Result);
+
+                if(version > int.Parse(Resources.CurrentVersion))
+                {
+                    MessageBox.Show("A newer version is avaliable, please download it to use this application");
+                    Environment.Exit(1);
+                }
+
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Form1 form = new Form1();
