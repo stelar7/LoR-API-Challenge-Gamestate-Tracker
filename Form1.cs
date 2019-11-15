@@ -219,6 +219,9 @@ namespace LoRTracker
 
             _InGameInterval = int.Parse(ShortP);
             _NotIngameInterval = int.Parse(LongP);
+
+            Debug.WriteLine("Got long poll = " + _NotIngameInterval);
+            Debug.WriteLine("Got short poll = " + _InGameInterval);
         }
 
         private void StartGamePollTask()

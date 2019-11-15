@@ -3,8 +3,11 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace LoRTracker
 {
@@ -142,6 +145,12 @@ namespace LoRTracker
             }
         }
 
+        internal static string GetMouseLocation()
+        {
+            GetCursorPos(out POINT mousePosition);
+            return mousePosition.X + ", " + (Screen.PrimaryScreen.Bounds.Height - mousePosition.Y);
+        }
+
         static string LastDebugMessage;
 
         internal static async Task PushGameStart()
@@ -188,13 +197,15 @@ namespace LoRTracker
             }
 
             LastBoardState = CurrentBoardState;
+            CurrentBoardState.Mouse = GetMouseLocation();
+            string OutputState = JsonConvert.SerializeObject(CurrentBoardState);
 
             var formContent = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("token", Form1.Token),
                 new KeyValuePair<string, string>("gameToken", ActiveGameToken),
                 new KeyValuePair<string, string>("time", ActiveGameTime.ToString()),
-                new KeyValuePair<string, string>("state", CurrentBoardState.ToString()),
+                new KeyValuePair<string, string>("state", OutputState),
             });
 
             var response = await Client.PostAsync(new Uri(Resources.GameUpdateUrl), formContent);
@@ -266,6 +277,40 @@ namespace LoRTracker
             ActiveGameTime = 0;
         }
 
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+
+            public static implicit operator Point(POINT point)
+            {
+                return new Point(point.X, point.Y);
+            }
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorPos(out POINT lpPoint);
+
+        public static Point GetCursorPosition()
+        {
+            POINT lpPoint;
+            GetCursorPos(out lpPoint);
+
+            return lpPoint;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
         public class ExpeditionResponse
         {
             public bool IsActive;
@@ -296,6 +341,7 @@ namespace LoRTracker
             public string GameState;
             public GameScreen Screen;
             public List<GameRectangle> Rectangles;
+            public string Mouse;
         }
 
         public class GameScreen
