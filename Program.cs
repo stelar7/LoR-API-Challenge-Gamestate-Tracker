@@ -38,6 +38,7 @@ namespace LoRTracker
             }
             else
             {
+                MessageBox.Show("Application already running.");
                 ShowWindowAsync(RunningProcesses[0].MainWindowHandle, 2);
                 ShowWindowAsync(RunningProcesses[0].MainWindowHandle, 9);
             }

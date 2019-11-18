@@ -76,16 +76,16 @@ namespace LoRTracker
 
             Application.ApplicationExit += (s, e) => GameAPI.CancelGame().Wait();
 
-            Icon = Icon.FromHandle(Resources.AppIcon.GetHicon());
+            Icon = Icon.FromHandle(Resources.Icon_Large.GetHicon());
 
             components = new System.ComponentModel.Container();
             notifyIcon = new NotifyIcon(components)
             {
                 Visible = true,
-                Icon = Icon.FromHandle(Resources.AppIcon.GetHicon()),
+                Icon = Icon.FromHandle(Resources.Icon_Small.GetHicon()),
                 ContextMenu = new ContextMenu(new MenuItem[] {
-                    new MenuItem("Open", Open),
-                    new MenuItem("Exit", Exit)
+                    new MenuItem("Open", this.Open),
+                    new MenuItem("Exit", this.Exit)
                 })
             };
 

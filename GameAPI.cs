@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -29,7 +31,14 @@ namespace LoRTracker
         internal static string LastGameID;
         internal static int ActiveGameTime;
 
-        internal static GameRectResponse LastBoardState;
+
+        internal static string LastBoardState;
+        internal static string LastStateString;
+
+        internal static string LogFolderPath = Path.GetTempPath() + "/../Riot Games/Legends of Runeterra/Logs";
+        internal static string LatestLogFilePath;
+
+        internal static long LastLogPosition = 0;
 
         public static async Task<ActiveDeckResponse> GetActiveDeckList()
         {
@@ -80,8 +89,6 @@ namespace LoRTracker
             return CurrentState == PlayerState.OFFLINE;
         }
 
-        static string LastStateString;
-
         public static async Task UpdateState()
         {
             try
@@ -117,7 +124,23 @@ namespace LoRTracker
 
                 if(IsOffline())
                 {
-                    await CancelGame();
+                    if(ActiveGameToken != null || ActiveGameToken.Length < 5)
+                    {
+                        await CancelGame();
+                    }
+
+                    if(LatestLogFilePath != null || LatestLogFilePath.Length > 5)
+                    {
+                        LatestLogFilePath = null;
+                    }
+
+                }
+                else
+                {
+                    if(LatestLogFilePath == null || LatestLogFilePath.Length < 5)
+                    {
+                        LatestLogFilePath = FindLatestLogFile();
+                    }
                 }
 
                 if(EnteredGame())
@@ -127,7 +150,11 @@ namespace LoRTracker
 
                 if(IsInGame())
                 {
-                    LastActiveDeck = (await GetActiveDeckList()).DeckCode;
+                    if(LastActiveDeck == null || LastActiveDeck.Length < 10)
+                    {
+                        LastActiveDeck = (await GetActiveDeckList()).DeckCode;
+                    }
+
                     await PushUpdates();
                 }
 
@@ -145,10 +172,21 @@ namespace LoRTracker
             }
         }
 
-        internal static string GetMouseLocation()
+        private static string FindLatestLogFile()
+        {
+            string[] files = Directory.GetFiles(LogFolderPath);
+            Array.Sort(files, StrCmpLogicalW);
+            Array.Reverse(files);
+            return files[0];
+        }
+
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+        public static extern int StrCmpLogicalW(string psz1, string psz2);
+
+        internal static Point GetMouseLocation()
         {
             GetCursorPos(out POINT mousePosition);
-            return mousePosition.X + ", " + (Screen.PrimaryScreen.Bounds.Height - mousePosition.Y);
+            return new Point(mousePosition.X, (Screen.PrimaryScreen.Bounds.Height - mousePosition.Y));
         }
 
         static string LastDebugMessage;
@@ -174,8 +212,8 @@ namespace LoRTracker
             ActiveGameToken = await response.Content.ReadAsStringAsync();
             ActiveGameTime = 0;
 
-            LastDebugMessage = "Pushed game start event";
-            Debug.WriteLine("Pushed game start event");
+            LastDebugMessage = "Pushed game start event with token " + ActiveGameToken;
+            Debug.WriteLine("Pushed game start event with token " + ActiveGameToken);
         }
 
         internal static async Task PushUpdates()
@@ -186,26 +224,23 @@ namespace LoRTracker
             }
 
             var CurrentBoardState = await GetPositionalRects();
-            if(LastBoardState == null)
-            {
-                LastBoardState = CurrentBoardState;
-            }
 
-            if(LastBoardState == CurrentBoardState)
+            CurrentBoardState.Log = await GetLogChanges();
+            CurrentBoardState.Mouse = GetMouseState();
+
+            string OutputState = JsonConvert.SerializeObject(CurrentBoardState);
+            if(LastBoardState == OutputState)
             {
                 return;
             }
 
-            LastBoardState = CurrentBoardState;
-            CurrentBoardState.Mouse = GetMouseLocation();
-            string OutputState = JsonConvert.SerializeObject(CurrentBoardState);
-
+            LastBoardState = OutputState;
             var formContent = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("token", Form1.Token),
                 new KeyValuePair<string, string>("gameToken", ActiveGameToken),
                 new KeyValuePair<string, string>("time", ActiveGameTime.ToString()),
-                new KeyValuePair<string, string>("state", OutputState),
+                new KeyValuePair<string, string>("state", LastBoardState),
             });
 
             var response = await Client.PostAsync(new Uri(Resources.GameUpdateUrl), formContent);
@@ -221,6 +256,54 @@ namespace LoRTracker
                 LastDebugMessage = "Pushed update event";
                 Debug.WriteLine("Pushed update event");
             }
+        }
+
+        private static MouseState GetMouseState()
+        {
+            var location = GetMouseLocation();
+            ushort state = GetAsyncKeyState(0x01);
+            bool pressed = false;
+
+            if(state > 0)
+            {
+                pressed = true;
+            }
+
+            return new MouseState
+            {
+                Pressed = pressed,
+                X = location.X,
+                Y = location.Y
+            };
+        }
+
+        [DllImport("user32.dll")]
+        public static extern ushort GetAsyncKeyState(ushort virtualKeyCode);
+
+        private static async Task<List<string>> GetLogChanges()
+        {
+            FileStream fs = File.Open(LatestLogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+            fs.Position = LastLogPosition;
+            long remaining = fs.Length - fs.Position;
+            byte[] data = new byte[remaining];
+            await fs.ReadAsync(data, 0, data.Length);
+            LastLogPosition = fs.Position;
+
+            string encoded = Encoding.UTF8.GetString(data, 0, data.Length);
+            var lines = encoded.Split('\n');
+            List<string> results = new List<string>();
+
+            foreach(var line in lines)
+            {
+                if(line.Contains("GameAction"))
+                {
+                    results.Add(line);
+                }
+            }
+
+            return results;
+
         }
 
         internal static async Task PushGameEnd()
@@ -251,15 +334,11 @@ namespace LoRTracker
 
             ActiveGameToken = null;
             ActiveGameTime = 0;
+            LastActiveDeck = null;
         }
 
         internal static async Task CancelGame()
         {
-            if(ActiveGameToken == null || ActiveGameToken.Length < 5)
-            {
-                return;
-            }
-
             var formContent = new FormUrlEncodedContent(new[]
                 {
                     new KeyValuePair<string, string>("token", Form1.Token),
@@ -341,7 +420,17 @@ namespace LoRTracker
             public string GameState;
             public GameScreen Screen;
             public List<GameRectangle> Rectangles;
-            public string Mouse;
+
+
+            public MouseState Mouse;
+            public List<string> Log;
+        }
+
+        public class MouseState
+        {
+            public int X;
+            public int Y;
+            public bool Pressed;
         }
 
         public class GameScreen
