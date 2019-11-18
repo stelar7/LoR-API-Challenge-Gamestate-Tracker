@@ -210,7 +210,9 @@ namespace LoRTracker
 
             var response = await Client.PostAsync(new Uri(Resources.GameStartUrl), formContent);
             ActiveGameToken = await response.Content.ReadAsStringAsync();
+            LastActiveDeck = null;
             ActiveGameTime = 0;
+            LastLogPosition = 0;
 
             LastDebugMessage = "Pushed game start event with token " + ActiveGameToken;
             Debug.WriteLine("Pushed game start event with token " + ActiveGameToken);
@@ -333,8 +335,9 @@ namespace LoRTracker
             Debug.WriteLine(content);
 
             ActiveGameToken = null;
-            ActiveGameTime = 0;
             LastActiveDeck = null;
+            ActiveGameTime = 0;
+            LastLogPosition = 0;
         }
 
         internal static async Task CancelGame()
