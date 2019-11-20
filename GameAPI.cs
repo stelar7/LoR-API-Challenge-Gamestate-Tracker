@@ -116,31 +116,41 @@ namespace LoRTracker
                     LastStateString = NextState;
                     Debug.WriteLine(NextState);
                 }
+            }
+#pragma warning disable CS0168 
+            catch(HttpRequestException e)
+            {
+                CurrentState = PlayerState.OFFLINE;
+            }
 
+            if(IsOffline())
+            {
+                if(ActiveGameToken != null || ActiveGameToken?.Length < 5)
+                {
+                    await CancelGame();
+                }
+
+                if(LatestLogFilePath != null || LatestLogFilePath?.Length > 5)
+                {
+                    LatestLogFilePath = null;
+                }
+
+                return;
+
+            }
+            else
+            {
+                if(LatestLogFilePath == null || LatestLogFilePath?.Length < 5)
+                {
+                    LatestLogFilePath = FindLatestLogFile();
+                }
+            }
+
+            try
+            {
                 if(LastGameID == null)
                 {
                     LastGameID = (await GetGameResult()).GameID;
-                }
-
-                if(IsOffline())
-                {
-                    if(ActiveGameToken != null || ActiveGameToken.Length < 5)
-                    {
-                        await CancelGame();
-                    }
-
-                    if(LatestLogFilePath != null || LatestLogFilePath.Length > 5)
-                    {
-                        LatestLogFilePath = null;
-                    }
-
-                }
-                else
-                {
-                    if(LatestLogFilePath == null || LatestLogFilePath.Length < 5)
-                    {
-                        LatestLogFilePath = FindLatestLogFile();
-                    }
                 }
 
                 if(EnteredGame())
@@ -165,7 +175,6 @@ namespace LoRTracker
                     await PushGameEnd();
                 }
             }
-#pragma warning disable CS0168 
             catch(HttpRequestException e)
             {
                 CurrentState = PlayerState.OFFLINE;
@@ -348,7 +357,7 @@ namespace LoRTracker
                     new KeyValuePair<string, string>("gameToken", ActiveGameToken),
                 });
 
-            var response = await Client.PostAsync(new Uri(Resources.GameEndUrl), formContent);
+            var response = await Client.PostAsync(new Uri(Resources.GameCancelUrl), formContent);
             var content = await response.Content.ReadAsStringAsync();
 
             LastDebugMessage = "Pushed game cancel event";

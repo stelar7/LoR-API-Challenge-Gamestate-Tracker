@@ -247,7 +247,7 @@ namespace LoRTracker
                 GameAPI.ActiveGameTime += _InGameInterval;
             }
 
-            if(GameAPI.QuitGame())
+            if(GameAPI.QuitGame() || GameAPI.IsOffline())
             {
                 _GameTimer?.Change(_NotIngameInterval, _NotIngameInterval);
             }
