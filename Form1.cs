@@ -26,10 +26,16 @@ namespace LoRTracker
 
         internal static string PortString = "21337";
 
+        internal static DeckTrackerForm dtform;
+
         public Form1()
         {
             InitializeComponent();
             InitializeContext();
+
+            dtform = new DeckTrackerForm();
+            dtform.Show();
+            dtform.Hide();
 
             LoginWithDefaultIfPresent();
             HideWindow();
@@ -84,8 +90,8 @@ namespace LoRTracker
                 Visible = true,
                 Icon = Icon.FromHandle(Resources.Icon_Small.GetHicon()),
                 ContextMenu = new ContextMenu(new MenuItem[] {
-                    new MenuItem("Open", this.Open),
-                    new MenuItem("Exit", this.Exit)
+                    new MenuItem("Open", Open),
+                    new MenuItem("Exit", Exit)
                 })
             };
 
@@ -240,16 +246,99 @@ namespace LoRTracker
             if(GameAPI.EnteredGame())
             {
                 _GameTimer?.Change(_InGameInterval, _InGameInterval);
+                if(dtform.InvokeRequired)
+                {
+                    dtform.Invoke((MethodInvoker) delegate
+                    {
+                        dtform.Show();
+                        Debug.WriteLine("Showing list");
+                    });
+                }
+                else
+                {
+                    Invoke((MethodInvoker) delegate
+                     {
+                         dtform.Show();
+                         Debug.WriteLine("Showing list");
+                     });
+                }
             }
 
             if(GameAPI.IsInGame())
             {
                 GameAPI.ActiveGameTime += _InGameInterval;
+                if(dtform.InvokeRequired)
+                {
+                    dtform.Invoke((MethodInvoker) delegate
+                    {
+
+                        if(!dtform.Visible)
+                        {
+                            if(dtform.IsDisposed)
+                            {
+                                dtform = new DeckTrackerForm();
+                                dtform.Reset();
+                            }
+
+                            dtform.Show();
+                        }
+                        dtform.SetDeck(GameAPI.LastActiveDeck);
+                        dtform.UpdateState(GameAPI.LastBoardState);
+                    });
+                }
+                else
+                {
+                    Invoke((MethodInvoker) delegate
+                    {
+                        if(!dtform.Visible)
+                        {
+                            if(dtform.IsDisposed)
+                            {
+                                dtform = new DeckTrackerForm();
+                                dtform.Reset();
+                            }
+
+                            dtform.Show();
+                        }
+                        dtform.SetDeck(GameAPI.LastActiveDeck);
+                        dtform.UpdateState(GameAPI.LastBoardState);
+                    });
+                }
             }
 
             if(GameAPI.QuitGame() || GameAPI.IsOffline())
             {
                 _GameTimer?.Change(_NotIngameInterval, _NotIngameInterval);
+            }
+
+            if(GameAPI.IsInMenu())
+            {
+                _GameTimer?.Change(_NotIngameInterval, _NotIngameInterval);
+
+                if(dtform.InvokeRequired)
+                {
+                    dtform.Invoke((MethodInvoker) delegate
+                    {
+                        if(dtform.Visible)
+                        {
+                            dtform.Hide();
+                            dtform.Reset();
+                            Debug.WriteLine("Closing List");
+                        }
+                    });
+                }
+                else
+                {
+                    Invoke((MethodInvoker) delegate
+                   {
+                       if(dtform.Visible)
+                       {
+                           dtform.Hide();
+                           dtform.Reset();
+                           Debug.WriteLine("Closing List");
+                       }
+                   });
+                }
             }
 
             if(GameAPI.IsOffline())

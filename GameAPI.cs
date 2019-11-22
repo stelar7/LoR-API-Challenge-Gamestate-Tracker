@@ -84,6 +84,12 @@ namespace LoRTracker
             return CurrentState == PlayerState.GAME;
         }
 
+
+        internal static bool IsInMenu()
+        {
+            return CurrentState == PlayerState.MENU;
+        }
+
         public static bool IsOffline()
         {
             return CurrentState == PlayerState.OFFLINE;
